@@ -1,6 +1,7 @@
 import reddit_keys
 import pandas as pd
 import numpy as np
+import preprocess
 
 # The first step is setting up a virtual environment
 # Virtual environments are extremely important to writing clean code
@@ -56,65 +57,72 @@ reddit = praw.Reddit(
 # Double check that your instance is working by running this command
 print(reddit.read_only)
 
-# Now we can read posts from Reddit!
+submission_list = []
+comment_list = []
 
-# To read get and read through some posts in a subbredit, run this
-for submission in reddit.subreddit("test").hot(limit=10):
-    print(submission.title)
-# You can also sort by top, controversial, and more.
 
-submission_df = pd.DataFrame(columns=["SUBMISSION_ID", "Upvote_ratio"])
-submission_df.set_index("SUBMISSION_ID")
-comment_df = pd.DataFrame(columns=["POST_ID", "COMMENT_ID", "COMMENT_BODY"])
-comment_df.set_index("COMMENT_ID")
+def convert_to_df(submissions):
+    for submission in submissions:
+        temp_submission = {
+            "SUBMISSION_TITLE": submission.title,
+            "SUBMISSION_ID": submission.id,
+            "SUBMISSION_BODY": submission.selftext,
+            "UPVOTE_RATIO": submission.upvote_ratio,
+        }
+        submission_list.append(temp_submission)
+        for comment in submission.comments:
+            if type(comment) != praw.models.reddit.more.MoreComments:
+                temp_comment = {
+                    "COMMENT_ID": comment.id,
+                    "SUBMISSION_ID": submission.id,
+                    "COMMENT_BODY": comment.body,
+                    "UPVOTE_SCORE": comment.score,
+                }
+                comment_list.append(temp_comment)
+    submission_df = pd.DataFrame(submission_list)
+    submission_df.set_index("SUBMISSION_ID")
+    comment_df = pd.DataFrame(comment_list)
+    comment_df.set_index("COMMENT_ID")
 
+    return submission_df, comment_df
+
+
+submission_df, comment_df = convert_to_df(
+    reddit.subreddit("csMajors+cscareerquestions").hot(limit=5)
+)
+
+submission_df["CLEANED_BODY"] = submission_df["SUBMISSION_BODY"].apply(
+    # lambda text: preprocess.preprocess(["lower", "expand", "stopwords"], text)
+    lambda text: preprocess.preprocess(["expand", "lower", "stopwords"], text)
+)
+
+comment_df["CLEANED_BODY"] = comment_df["COMMENT_BODY"].apply(
+    # lambda text: preprocess.preprocess(["lower", "expand", "stopwords"], text)
+    lambda text: preprocess.preprocess(["expand", "lower", "stopwords"], text)
+)
+
+print(submission_df.head())
+print(comment_df.head())
 
 # A lot of useful information can come from a submission instance
-for submission in reddit.subreddit("AmItheAsshole").top(
-    time_filter="month", limit=5
-):
-    # Prints the body of a post
-    print(submission.selftext)
+# # Prints the ratio of upvotes
+# print(submission.upvote_ratio)
 
-    # Prints the ratio of upvotes
-    print(submission.upvote_ratio)
+# submission_df.loc[submission.id] = [
+#     submission.upvote_ratio,
+#     submission.selftext,
+# ]
 
-    submission_df.loc[submission.id] = [
-        submission.upvote_ratio,
-        submission.selftext,
-    ]
+# Prints each comment
 
-    # Prints each comment
-    for comment in submission.comments:
-        print(type(comment))
-        if type(comment) != praw.models.reddit.more.MoreComments:
-            print(comment.body)
-            print()
+# all = reddit.subreddit("csMajors+cscareerquestions")
 
-# And there's a lot more that can be done with a submission instance
+# # Then simply use the search feature with whatever query you'd like
+# search_submissions = all.search("Major", limit=10)
 
-# Finally let's look at searching by query, rather than by subreddit.
-# This will be especially useful for our project, so you can find niche or specific topics.
+# # Now we can iterate through these posts like before
+# print_submissions(search_submissions)
 
-# First create an instance of a subreddit like previously, but make it of the subreddit "all"
-# This indicates we want to search all of reddit for our results
-all = reddit.subreddit("all")
-
-# Then simply use the search feature with whatever query you'd like
-umich_submissions = all.search("University of Michigan", limit=10)
-
-# Now we can iterate through these posts like before
-for submission in umich_submissions:
-    print(submission.title)
-
-# You can also search within a subreddit, not just the entirety of Reddit.
-# To do so, simply replace "all", with whatever you'd like
-tennis = reddit.subreddit("tennis")
-
-tennis_submissions = tennis.search("How do I keep the ball in?", limit=5)
-
-for submission in tennis_submissions:
-    print(submission.title)
 
 # That's it for this guide.
 # Now, on your own, try messing around with the API and see what information you can gather.
