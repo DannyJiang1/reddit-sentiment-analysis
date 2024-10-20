@@ -2,6 +2,7 @@ import reddit_keys
 import pandas as pd
 import numpy as np
 import preprocess
+import json
 
 # The first step is setting up a virtual environment
 # Virtual environments are extremely important to writing clean code
@@ -86,6 +87,9 @@ def convert_to_df(submissions):
 
     return submission_df, comment_df
 
+def merge_submission_comment(submission_df, comment_df):
+    merged_df = pd.merge(comment_df, submission_df, on='SUBMISSION_ID', how='inner')
+    return merged_df
 
 submission_df, comment_df = convert_to_df(
     reddit.subreddit("csMajors+cscareerquestions").hot(limit=5)
@@ -103,6 +107,16 @@ comment_df["CLEANED_BODY"] = comment_df["COMMENT_BODY"].apply(
 
 print(submission_df.head())
 print(comment_df.head())
+
+merged_df = merge_submission_comment(submission_df, comment_df);
+
+def df_to_json(df, filename):
+    df_as_dict = df.to_dict(orient='records')
+    with open(filename, 'w') as json_file:
+        json.dump(df_as_dict, json_file, indent=4)
+    print(f"Data saved as {filename}")
+
+df_to_json(merged_df, "test.json")
 
 # A lot of useful information can come from a submission instance
 # # Prints the ratio of upvotes
