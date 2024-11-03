@@ -2,42 +2,10 @@ import reddit_keys
 import pandas as pd
 import numpy as np
 import preprocess
+from datetime import datetime
 import json
-
-# The first step is setting up a virtual environment
-# Virtual environments are extremely important to writing clean code
-# They isolate projects from each other, enhance colloboration, version control, and dependency management
-
-# To set up a virtual environment, first make sure you have Python installed
-
-# If you don't you can install python by doing the following:
-# macOS:
-# brew install python3
-# you can install homebrew here https://brew.sh
-
-# Windows or Linux(who uses Linux??):
-# sudo apt-get update
-# sudo apt-get install python3 python3-pip python3-venv python3-wheel python3-setuptools
-
-# Now run this command
-# python3 -m venv env
-# This creates a virtual environment in your working directory
-
-# To activate your env run
-# source env/bin/activate
-# Now you can safely install packages in your virtual environment!
-
-# From here we have to import the required packages
 import praw
 
-# You'll notice this line is giving an error,
-# that's because the package hasn't been installed to our virtual environment yet.
-
-# To install praw, run
-# pip install praw
-
-# For this project we will only be reading from the Reddit API
-# So first we create an instance that can do just that
 from reddit_keys import CLIENT_ID, CLIENT_SECRET
 
 reddit = praw.Reddit(
@@ -45,32 +13,23 @@ reddit = praw.Reddit(
     client_secret=CLIENT_SECRET,
     user_agent="my user agent",
 )
-# Go back to your Reddit App page from earlier
-# you'll see the client_secret there,
-# as well as the client_id, it's located below your application name
 
-# Don't just place those values in the Reddit instance, that's bad practice
-# Instead, place them in the reddit_keys.py file, replacing the placeholders with your values
-# Then add the import statement "from reddit_keys import CLIENT_ID, CLIENT_SECRET"
-# Now you can replace the quotes with those variables
-# Practices like these are what allow us to keep private variables out of public repositories
-
-# Double check that your instance is working by running this command
 print(reddit.read_only)
 
 submission_list = []
 comment_list = []
-
 
 def convert_to_df(submissions):
     for submission in submissions:
         temp_submission = {
             "SUBMISSION_TITLE": submission.title,
             "SUBMISSION_ID": submission.id,
+            "SUBMISSION_DATE": datetime.fromtimestamp(submission.created_utc).strftime('%Y-%m'),
             "SUBMISSION_BODY": submission.selftext,
             "UPVOTE_RATIO": submission.upvote_ratio,
         }
         submission_list.append(temp_submission)
+        num_comments = 0
         for comment in submission.comments:
             if type(comment) != praw.models.reddit.more.MoreComments:
                 temp_comment = {
@@ -80,6 +39,9 @@ def convert_to_df(submissions):
                     "UPVOTE_SCORE": comment.score,
                 }
                 comment_list.append(temp_comment)
+                num_comments += 1
+                if (num_comments > 10):
+                    break
     submission_df = pd.DataFrame(submission_list)
     submission_df.set_index("SUBMISSION_ID")
     comment_df = pd.DataFrame(comment_list)
@@ -88,11 +50,11 @@ def convert_to_df(submissions):
     return submission_df, comment_df
 
 def merge_submission_comment(submission_df, comment_df):
-    merged_df = pd.merge(comment_df, submission_df, on='SUBMISSION_ID', how='inner')
+    merged_df = pd.merge(comment_df, submission_df, on='SUBMISSION_ID', how='left')
     return merged_df
 
 submission_df, comment_df = convert_to_df(
-    reddit.subreddit("csMajors+cscareerquestions").hot(limit=5)
+    reddit.subreddit("csMajors+cscareerquestions+ITCareerQuestions").top(time_filter='all', limit=1000)
 )
 
 submission_df["CLEANED_BODY"] = submission_df["SUBMISSION_BODY"].apply(
@@ -116,7 +78,7 @@ def df_to_json(df, filename):
         json.dump(df_as_dict, json_file, indent=4)
     print(f"Data saved as {filename}")
 
-df_to_json(merged_df, "test.json")
+df_to_json(merged_df, "csCareerData.json")
 
 # A lot of useful information can come from a submission instance
 # # Prints the ratio of upvotes
